@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Review Global</h1>
+  <p class="muted">Cadastro global: <code>{{ shared_editor_path }}</code></p>
+  <p><a href="/">Voltar ao painel</a></p>
+  <p class="muted">
+    Total: {{ counts.all }} |
+    Pendentes: {{ counts.pending }} |
+    Aprovados: {{ counts.approved }} |
+    Ignorados: {{ counts.ignore }}
+  </p>
+  <form method="get" action="/global/review" class="form-grid">
+    <label>Busca
+      <input name="q" value="{{ q }}" placeholder="fingerprint, descricao, sku">
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="pending" {{ "selected" if status_filter == "pending" else "" }}>Pendentes</option>
+        <option value="all" {{ "selected" if status_filter == "all" else "" }}>Todos</option>
+        <option value="approved" {{ "selected" if status_filter == "approved" else "" }}>Aprovados</option>
+        <option value="ignore" {{ "selected" if status_filter == "ignore" else "" }}>Ignorados</option>
+        <option value="review" {{ "selected" if status_filter == "review" else "" }}>Review</option>
+        <option value="empty" {{ "selected" if status_filter == "empty" else "" }}>Status vazio</option>
+      </select>
+    </label>
+    <label>Limite
+      <input name="limit" value="{{ limit }}">
+    </label>
+    <button type="submit">Filtrar</button>
+  </form>
+</section>
+
+<section class="card">
+  {% if not rows %}
+    <p class="muted">Nenhum item encontrado para o filtro atual.</p>
+  {% endif %}
+
+  {% for row in rows %}
+    <article class="review-item review-detailed">
+      <h3>{{ row.xProd or row.xProd_norm or row.fingerprint }}</h3>
+      <div class="muted">Status: <strong>{{ row.status or "PENDING" }}</strong> | FP: <code>{{ row.fingerprint }}</code></div>
+
+      <div class="review-meta-grid">
+        <div><strong>xProd:</strong> {{ row.xProd }}</div>
+        <div><strong>xProd_norm:</strong> {{ row.xProd_norm }}</div>
+        <div><strong>uCom:</strong> {{ row.uCom }}</div>
+        <div><strong>qCom:</strong> {{ row.qCom }}</div>
+        <div><strong>vUnCom:</strong> {{ row.vUnCom }}</div>
+        <div><strong>conversion_issue:</strong> {{ row.conversion_issue }}</div>
+        <div><strong>emit_cnpj:</strong> {{ row.emit_cnpj }}</div>
+        <div><strong>emit_xNome:</strong> {{ row.emit_xNome }}</div>
+        <div><strong>dest_cnpj:</strong> {{ row.dest_cnpj }}</div>
+        <div><strong>dest_xNome:</strong> {{ row.dest_xNome }}</div>
+      </div>
+
+      <div class="review-meta-grid">
+        <div><strong>suggested_sku_id:</strong> {{ row.suggested_sku_id }}</div>
+        <div><strong>suggested_sku_name:</strong> {{ row.suggested_sku_name }}</div>
+        <div><strong>suggested_sku_name_canonical:</strong> {{ row.suggested_sku_name_canonical }}</div>
+        <div><strong>suggested_base_measure:</strong> {{ row.suggested_base_measure }}</div>
+        <div><strong>suggested_base_qty_per_purchase_unit:</strong> {{ row.suggested_base_qty_per_purchase_unit }}</div>
+        <div><strong>confidence:</strong> {{ row.confidence }}</div>
+      </div>
+
+      <details class="review-details">
+        <summary>Ver rationale / timestamps</summary>
+        <p><strong>rationale:</strong> {{ row.rationale }}</p>
+        <p><strong>created_at:</strong> {{ row.created_at }} | <strong>updated_at:</strong> {{ row.updated_at }}</p>
+      </details>
+
+      <form method="post" action="/global/review/decision" class="review-form">
+        <input type="hidden" name="fingerprint" value="{{ row.fingerprint }}">
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        <input type="hidden" name="limit" value="{{ limit }}">
+        <label>SKU escolhido
+          <input name="chosen_sku_id" value="{{ row.chosen_sku_id }}">
+        </label>
+        <label>Base measure override
+          <input name="base_measure_override" value="{{ row.base_measure_override }}">
+        </label>
+        <label>Base qty override
+          <input name="base_qty_per_purchase_unit_override" value="{{ row.base_qty_per_purchase_unit_override }}">
+        </label>
+        <label>Notas
+          <textarea name="notes" rows="2">{{ row.notes }}</textarea>
+        </label>
+        <div class="actions">
+          <button type="submit" name="action" value="approve">Aprovar</button>
+          <button type="submit" class="button-secondary" name="action" value="ignore">Ignorar</button>
+        </div>
+      </form>
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}

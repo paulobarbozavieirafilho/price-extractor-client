@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Review pendente compartilhado - {{ client.name }}</h1>
+  <p class="muted">Grupo economico: {{ client.economic_group }}</p>
+  <p class="muted">Cadastro global (todos os clientes): <code>{{ shared_editor_path }}</code></p>
+  <p><a href="/">Voltar ao painel</a></p>
+</section>
+
+<section class="card">
+  {% if not pending %}
+    <p class="muted">Sem itens pendentes neste cliente.</p>
+  {% endif %}
+
+  {% for row in pending %}
+    <article class="review-item">
+      <h3>{{ row.xProd or row.xProd_norm or row.fingerprint }}</h3>
+      <div class="muted">FP: <code>{{ row.fingerprint }}</code></div>
+      <div class="muted">Sugestao: {{ row.suggested_sku_id }} - {{ row.suggested_sku_name_canonical }}</div>
+      <div class="muted">uCom={{ row.uCom }} | qCom={{ row.qCom }} | vUnCom={{ row.vUnCom }} | confidence={{ row.confidence }}</div>
+      <form method="post" action="/clients/{{ client.id }}/review" class="review-form">
+        <input type="hidden" name="fingerprint" value="{{ row.fingerprint }}">
+        <label>SKU escolhido
+          <input name="chosen_sku_id" value="{{ row.chosen_sku_id }}">
+        </label>
+        <label>Notas
+          <input name="notes" value="{{ row.notes }}">
+        </label>
+        <div class="actions">
+          <button type="submit" name="action" value="approve">Aprovar</button>
+          <button type="submit" name="action" value="ignore">Ignorar</button>
+        </div>
+      </form>
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}

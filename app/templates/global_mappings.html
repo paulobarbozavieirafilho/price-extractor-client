@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Mappings Globais</h1>
+  <p><a href="/">Voltar ao painel</a></p>
+  <form method="get" action="/global/mappings" class="form-grid">
+    <label>Busca
+      <input name="q" value="{{ q }}" placeholder="fingerprint, sku_id, status">
+    </label>
+    <label>Limite
+      <input name="limit" value="{{ limit }}">
+    </label>
+    <button type="submit">Filtrar</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Novo mapping</h2>
+  <form method="post" action="/global/mappings" class="form-grid">
+    <label>Fingerprint
+      <input name="fingerprint" required>
+    </label>
+    <label>SKU ID
+      <input name="sku_id">
+    </label>
+    <label>Status
+      <input name="status" placeholder="APPROVED, REVIEW, IGNORE...">
+    </label>
+    <label>Base measure override
+      <input name="base_measure_override">
+    </label>
+    <label>Base qty override
+      <input name="base_qty_per_purchase_unit_override">
+    </label>
+    <button type="submit">Salvar mapping</button>
+  </form>
+</section>
+
+<section class="card">
+  {% if not rows %}
+    <p class="muted">Nenhum mapping encontrado.</p>
+  {% endif %}
+
+  {% for row in rows %}
+    <article class="review-item">
+      <h3>{{ row.fingerprint }}</h3>
+      <form method="post" action="/global/mappings" class="review-form">
+        <input type="hidden" name="fingerprint" value="{{ row.fingerprint }}">
+        <label>SKU ID
+          <input name="sku_id" value="{{ row.sku_id }}">
+        </label>
+        <label>Status
+          <input name="status" value="{{ row.status }}">
+        </label>
+        <label>Base measure override
+          <input name="base_measure_override" value="{{ row.base_measure_override }}">
+        </label>
+        <label>Base qty override
+          <input name="base_qty_per_purchase_unit_override" value="{{ row.base_qty_per_purchase_unit_override }}">
+        </label>
+        <button type="submit">Salvar mapping</button>
+      </form>
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}

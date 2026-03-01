@@ -1,0 +1,31 @@
+[project]
+name = "price-extractor-client"
+version = "0.1.0"
+description = "MVP multi-cliente para pipeline de extracao e alertas de preco de NF-e."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "jinja2>=3.1.4",
+  "pandas>=2.2.3",
+  "numpy>=2.1.3",
+  "openpyxl>=3.1.5",
+  "tqdm>=4.66.5",
+  "apscheduler>=3.10.4",
+  "python-multipart>=0.0.12",
+]
+
+[project.scripts]
+price-client = "app.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

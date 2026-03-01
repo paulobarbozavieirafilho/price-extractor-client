@@ -1,0 +1,31 @@
+name: Daily Client Run
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 10 * * *" # 07:00 America/Sao_Paulo (BRT=UTC-3)
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run all clients
+        env:
+          PEC_NOTEBOOK_PATH: ${{ secrets.PEC_NOTEBOOK_PATH }}
+        run: |
+          price-client init-db
+          price-client run-all
+

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Painel de clientes</h1>
+  <p class="muted">Notebook legado: <code>{{ notebook_path }}</code></p>
+  <p class="muted">Cadastro global: <code>{{ shared_editor_path }}</code></p>
+  <p class="muted">
+    Review pendente: {{ global_counts.review_pending }} |
+    Catalogo: {{ global_counts.catalog_total }} |
+    Mappings: {{ global_counts.mappings_total }}
+  </p>
+  <p>
+    <a class="button-link" href="/global/review">Review Global</a>
+    <a class="button-link" href="/global/mappings">Mappings</a>
+    <a class="button-link" href="/global/catalog">Catalogo</a>
+  </p>
+  <form method="post" action="/global/sync/import" style="display:inline-block; margin-right:8px;">
+    <button type="submit">Importar do Excel</button>
+  </form>
+  <form method="post" action="/global/sync/export" style="display:inline-block;">
+    <button type="submit">Exportar para Excel</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Novo cliente</h2>
+  <form method="post" action="/clients" class="form-grid">
+    <label>Nome
+      <input name="name" required placeholder="Ex: Ferreirinha Group">
+    </label>
+    <label>Slug
+      <input name="slug" placeholder="ex: ferreirinha-group">
+    </label>
+    <label>Grupo economico
+      <input name="economic_group" value="default" placeholder="ex: ferreirinha">
+    </label>
+    <label>Root dir
+      <input name="root_dir" placeholder="{{ default_clients_root }}\\cliente-a">
+    </label>
+    <label class="full">Lojas (CNPJ=Nome da loja, 1 por linha)
+      <textarea name="stores_text" rows="4" placeholder="49223665000153=FERREIRINHA_LEBLON"></textarea>
+    </label>
+    <button type="submit">Salvar cliente</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Clientes cadastrados</h2>
+  {% if not clients_data %}
+    <p class="muted">Nenhum cliente cadastrado ainda.</p>
+  {% endif %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>Status ultimo run</th>
+          <th>Quando</th>
+          <th>Pendentes</th>
+          <th>XMLs</th>
+          <th>Lojas</th>
+          <th>Acoes</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for item in clients_data %}
+        {% set client = item.client %}
+        {% set run = item.last_run %}
+        <tr>
+          <td>
+            <div><strong>{{ client.name }}</strong></div>
+            <div class="muted">{{ client.slug }}</div>
+            <div class="muted">Grupo: {{ client.economic_group }}</div>
+            <div class="muted"><code>{{ client.root_dir }}</code></div>
+          </td>
+          <td>
+            {% if run %}
+              <span class="badge {{ run.status }}">{{ run.status }}</span>
+            {% else %}
+              <span class="badge neutral">nunca rodou</span>
+            {% endif %}
+            <div class="muted">{{ "ativo" if client.active else "inativo" }}</div>
+          </td>
+          <td>
+            {% if run %}
+              <div>{{ run.started_at }}</div>
+              <div class="muted">{{ run.finished_at or "" }}</div>
+            {% else %}
+              <span class="muted">-</span>
+            {% endif %}
+          </td>
+          <td>{{ run.pending_review_count if run else 0 }}</td>
+          <td>{{ run.xml_count if run else 0 }}</td>
+          <td>
+            {% if item.stores %}
+              {% for cnpj, loja in item.stores.items() %}
+                <div class="muted">{{ cnpj }} - {{ loja }}</div>
+              {% endfor %}
+            {% else %}
+              <span class="muted">Sem mapeamento</span>
+            {% endif %}
+          </td>
+          <td class="actions">
+            <form method="post" action="/clients/{{ client.id }}/run">
+              <button type="submit">Reprocessar</button>
+            </form>
+            <form method="post" action="/clients/{{ client.id }}/toggle">
+              <button type="submit">{{ "Desativar" if client.active else "Ativar" }}</button>
+            </form>
+            <a class="button-link" href="/clients/{{ client.id }}/review">Review Global</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Catalogo Global</h1>
+  <p><a href="/">Voltar ao painel</a></p>
+  <form method="get" action="/global/catalog" class="form-grid">
+    <label>Busca
+      <input name="q" value="{{ q }}" placeholder="sku_id, nome, brand, categoria">
+    </label>
+    <label>Limite
+      <input name="limit" value="{{ limit }}">
+    </label>
+    <button type="submit">Filtrar</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Novo SKU</h2>
+  <form method="post" action="/global/catalog" class="form-grid">
+    <label>SKU ID
+      <input name="sku_id" required>
+    </label>
+    <label>Nome canonico
+      <input name="sku_name_canonical">
+    </label>
+    <label>Brand
+      <input name="brand">
+    </label>
+    <label>Category
+      <input name="category">
+    </label>
+    <label>Base measure
+      <input name="base_measure">
+    </label>
+    <button type="submit">Salvar catalogo</button>
+  </form>
+</section>
+
+<section class="card">
+  {% if not rows %}
+    <p class="muted">Nenhum SKU encontrado.</p>
+  {% endif %}
+
+  {% for row in rows %}
+    <article class="review-item">
+      <h3>{{ row.sku_id }} - {{ row.sku_name_canonical }}</h3>
+      <form method="post" action="/global/catalog" class="review-form">
+        <input type="hidden" name="sku_id" value="{{ row.sku_id }}">
+        <label>Nome canonico
+          <input name="sku_name_canonical" value="{{ row.sku_name_canonical }}">
+        </label>
+        <label>Brand
+          <input name="brand" value="{{ row.brand }}">
+        </label>
+        <label>Category
+          <input name="category" value="{{ row.category }}">
+        </label>
+        <label>Base measure
+          <input name="base_measure" value="{{ row.base_measure }}">
+        </label>
+        <button type="submit">Salvar catalogo</button>
+      </form>
+    </article>
+  {% endfor %}
+</section>
+{% endblock %}
