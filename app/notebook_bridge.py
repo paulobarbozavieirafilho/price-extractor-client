@@ -32,7 +32,7 @@ class LegacyNotebookBridge:
     """
 
     HARDCODED_KEY_PATTERN = (
-        r'OPENAI_API_KEY\s*=\s*os\.getenv\("OPENAI_API_KEY",\s*"[^"]*"\)\.strip\(\)'
+        r'OPENAI_API_KEY\s*=\s*os\.getenv\("OPENAI_API_KEY",\s*".*?"\)\.strip\(\)'
     )
 
     def __init__(self, notebook_path: Path):
@@ -64,6 +64,11 @@ class LegacyNotebookBridge:
             return ""
 
         if idx == 1:
+            src = re.sub(
+                r'OPENAI_API_KEY\s*=\s*["\']sk-[^"\']+["\']',
+                'OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()',
+                src,
+            )
             src = re.sub(
                 self.HARDCODED_KEY_PATTERN,
                 'OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()',
@@ -167,6 +172,75 @@ class LegacyNotebookBridge:
 
             ns["build_price_alerts"] = _safe_build_price_alerts
 
+        original_apply_mappings = ns.get("apply_mappings")
+        if callable(original_apply_mappings):
+            def _safe_apply_mappings(df_items, mappings, catalog):
+                deduped, removed = LegacyNotebookBridge._dedupe_compra_rows(df_items)
+                if removed > 0:
+                    print(
+                        f"[INFO] Dedupe de compras: {removed} item(ns) duplicado(s) removido(s) por chave NF-e/item."
+                    )
+                return original_apply_mappings(deduped, mappings, catalog)
+
+            ns["apply_mappings"] = _safe_apply_mappings
+
+    @staticmethod
+    def _as_clean_str_col(df: pd.DataFrame, col: str) -> pd.Series:
+        if col not in df.columns:
+            return pd.Series([""] * len(df.index), index=df.index)
+        return df[col].fillna("").astype(str).str.strip()
+
+    @staticmethod
+    def _dedupe_compra_rows(df_items: pd.DataFrame | None) -> tuple[pd.DataFrame, int]:
+        """
+        Remove duplicidade de itens de compra para evitar nota repetida no resultado.
+
+        Chave primaria:
+          - chNFe + nItem (quando ambos existem)
+
+        Fallback (quando a chave NF-e nao veio no XML):
+          - emit_cnpj, dest_cnpj, nNF, serie, dhEmi, cEAN, cProd,
+            xProd_norm, uCom, qCom, vUnCom, vProd
+        """
+        if df_items is None or getattr(df_items, "empty", False):
+            return pd.DataFrame() if df_items is None else df_items, 0
+
+        df = df_items.copy()
+        before = int(len(df.index))
+
+        ch_nfe = LegacyNotebookBridge._as_clean_str_col(df, "chNFe")
+        n_item = LegacyNotebookBridge._as_clean_str_col(df, "nItem")
+        has_nf_key = ch_nfe.ne("") & n_item.ne("")
+
+        key_by_nf = ch_nfe + "|" + n_item
+
+        fallback_cols = [
+            "emit_cnpj",
+            "dest_cnpj",
+            "nNF",
+            "serie",
+            "dhEmi",
+            "cEAN",
+            "cProd",
+            "xProd_norm",
+            "uCom",
+            "qCom",
+            "vUnCom",
+            "vProd",
+        ]
+        fallback_parts = [LegacyNotebookBridge._as_clean_str_col(df, col) for col in fallback_cols]
+        fallback_key = fallback_parts[0]
+        for part in fallback_parts[1:]:
+            fallback_key = fallback_key + "|" + part
+
+        dedupe_key = key_by_nf.where(has_nf_key, fallback_key)
+        dedupe_key = dedupe_key.fillna("").astype(str)
+
+        keep_mask = ~dedupe_key.duplicated(keep="first")
+        out = df.loc[keep_mask].copy()
+        removed = before - int(len(out.index))
+        return out, removed
+
     @staticmethod
     def _count_alert_rows(editor_path: Path, sheet_name: str) -> int:
         try:
@@ -264,3 +338,76 @@ class LegacyNotebookBridge:
             editor_path=editor_path,
             out_dir=out_dir,
         )
+
+    def resuggest_review_rows(
+        self,
+        *,
+        review_rows: list[dict[str, Any]],
+        catalog_rows: list[dict[str, Any]],
+        runtime_dir: Path,
+        editor_path: Path,
+        brand: str = "GLOBAL",
+    ) -> dict[str, dict[str, str]]:
+        if not review_rows:
+            return {}
+
+        xml_dir = runtime_dir / "xml"
+        out_dir = runtime_dir / "out"
+        xml_dir.mkdir(parents=True, exist_ok=True)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        editor_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Evita poluir stdout ao carregar o notebook.
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            ns = self._load_namespace(
+                xml_dir=xml_dir,
+                out_dir=out_dir,
+                editor_path=editor_path,
+                cnpj_to_loja=None,
+                brand=brand,
+            )
+
+        llm_suggest_mapping = ns.get("llm_suggest_mapping")
+        if not callable(llm_suggest_mapping):
+            raise RuntimeError("Funcao llm_suggest_mapping nao encontrada no notebook legado.")
+
+        suggest_model = str(ns.get("SUGGEST_MODEL") or os.getenv("SUGGEST_MODEL", "gpt-4o"))
+        catalog_df = pd.DataFrame(catalog_rows or [])
+        for col in ("sku_id", "sku_name_canonical", "brand", "category", "base_measure"):
+            if col not in catalog_df.columns:
+                catalog_df[col] = ""
+
+        out: dict[str, dict[str, str]] = {}
+        for row in review_rows:
+            fp = str(row.get("fingerprint") or "").strip()
+            if not fp:
+                continue
+            try:
+                suggestion = llm_suggest_mapping(row, catalog_df, model=suggest_model) or {}
+            except Exception as exc:
+                suggestion = {
+                    "suggested_sku_id": "",
+                    "suggested_sku_name": "",
+                    "suggested_sku_name_canonical": str(
+                        row.get("xProd_norm") or row.get("xProd") or ""
+                    ).strip(),
+                    "suggested_base_measure": "",
+                    "suggested_base_qty_per_purchase_unit": "",
+                    "confidence": "",
+                    "rationale": f"{type(exc).__name__}: {exc}",
+                }
+
+            out[fp] = {
+                "suggested_sku_id": str(suggestion.get("suggested_sku_id") or "").strip(),
+                "suggested_sku_name": str(suggestion.get("suggested_sku_name") or "").strip(),
+                "suggested_sku_name_canonical": str(
+                    suggestion.get("suggested_sku_name_canonical") or ""
+                ).strip(),
+                "suggested_base_measure": str(suggestion.get("suggested_base_measure") or "").strip(),
+                "suggested_base_qty_per_purchase_unit": str(
+                    suggestion.get("suggested_base_qty_per_purchase_unit") or ""
+                ).strip(),
+                "confidence": str(suggestion.get("confidence") or "").strip(),
+                "rationale": str(suggestion.get("rationale") or "").strip(),
+            }
+        return out

@@ -4,6 +4,8 @@ __pycache__/
 venv/
 data/*.db
 data/shared_state/
+data/upload_jobs/
+data/runtime/
 clientes/*/
 !clientes/.gitkeep
 input/

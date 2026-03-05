@@ -21,6 +21,7 @@ MVP para transformar o pipeline atual (notebook) em um sistema multi-cliente com
 
 - Python 3.11+
 - notebook legado `nfe_sku_pipeline_v10.ipynb` acessivel no disco
+- para upload de `.rar`: utilitario `unrar` instalado no sistema
 
 ## 2) Instalacao
 
@@ -32,6 +33,8 @@ python -m venv .venv
 pip install -U pip
 pip install -e .
 ```
+
+Obs. para arquivos `.rar`, alem do pacote Python `rarfile`, o binario `unrar` precisa existir no sistema operacional.
 
 ## 3) Configuracao basica
 
@@ -128,6 +131,7 @@ Funcionalidades:
 - review global (aprovar/ignorar fingerprint pendente)
 - tela de mappings globais (buscar, criar e editar)
 - tela de catalogo global (buscar, criar e editar)
+- tela de upload de XML/ZIP/RAR por loja com progresso por arquivo
 - importacao/exportacao opcional com o Excel compartilhado (bridge com legado)
 
 ## 6.1) Painel V3 (layout React do prototipo)
@@ -150,6 +154,26 @@ Abrir:
 
 - `http://127.0.0.1:5173`
 
+Atalho 1-clique (Windows):
+
+```bat
+iniciar-painel.bat
+```
+
+Isso abre duas janelas (backend + frontend) automaticamente.
+Se quiser testar os componentes separadamente:
+
+```bat
+run-backend.bat
+run-frontend.bat
+```
+
+Para encerrar:
+
+```bat
+parar-painel.bat
+```
+
 Endpoints usados pelo frontend:
 
 - `GET /api/review?status=ALL|PENDING|APPROVED|IGNORED&loja=&search=`
@@ -160,6 +184,21 @@ Endpoints usados pelo frontend:
 - `DELETE /api/mappings/{id}`
 - `GET /api/catalog?search=&category=`
 - `GET /api/catalog/{sku_id}/fingerprints`
+- `POST /api/upload` (multipart: `files[]`, `loja_id`)
+- `GET /api/upload/status/{job_id}`
+
+Endpoints do Cockpit:
+
+- `GET /api/grupos`
+- `POST /api/grupos?tipo=grupo|independente`
+- `GET /api/grupos/{id}`
+- `PUT /api/grupos/{id}?tipo=grupo|independente`
+- `GET /api/lojas`
+- `POST /api/lojas`
+- `PUT /api/lojas/{id}`
+- `GET /api/alertas/texto?grupo_id=&periodo=DIARIO|SEMANAL|SEMANAL_ATUAL|MENSAL`
+- `GET /api/alertas/excel?grupo_id=&periodo=DIARIO|SEMANAL|SEMANAL_ATUAL|MENSAL`
+- `POST /api/pipeline/run` (JSON: `grupo_id` ou `loja_id`, `periodo`)
 
 ## 7) Scheduler diario
 
@@ -187,6 +226,7 @@ Para usar no GitHub Actions, configure no repositorio:
 ## Observacoes importantes
 
 - A logica principal de negocio vem do notebook legado, carregado dinamicamente.
+- O processamento aplica deduplicacao de compras por `chNFe + nItem` (com fallback por campos da nota/item), evitando duplicar a mesma compra quando o mesmo XML aparece mais de uma vez.
 - Nesta etapa, a entrega gera os arquivos de WhatsApp, mas nao envia por API.
 - A consolidacao de aprovacoes do review acontece no proximo processamento do cliente.
 

@@ -1,4 +1,6 @@
 import { Fragment, useCallback, useState, useRef, useEffect, useMemo } from "react";
+import CockpitTab from "./components/CockpitTab";
+import UploadTab from "./components/UploadTab";
 
 const REVIEW_DATA = [
   { id: 1, fingerprint: "10915021000190|7894904006458|BACON DEFUMADO SEARA|KG",
@@ -83,6 +85,8 @@ const SearchIcon = p => <Icon {...p} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6
 const AlertIcon  = p => <Icon {...p} d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0-3.42 0zM12 9v4M12 17h.01"/>;
 const MapIcon    = p => <Icon {...p} d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16"/>;
 const BookIcon   = p => <Icon {...p} d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z"/>;
+const CockpitIcon = p => <Icon {...p} d="M3 13h8V3H3v10zm10 8h8V11h-8v10zM3 21h8v-6H3v6zm10-10h8V3h-8v8z"/>;
+const UploadIcon  = p => <Icon {...p} d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>;
 const EditIcon   = p => <Icon {...p} d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>;
 const TrashIcon  = p => <Icon {...p} d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>;
 const SaveIcon   = p => <Icon {...p} d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/>;
@@ -132,10 +136,11 @@ const Btn = ({children,onClick,variant="default",small=false,disabled=false}) =>
     default:{bg:"#f9fafb",color:"#374151",border:"#e5e7eb"},
   };
   const c = styles[variant]||styles.default;
-  return <button disabled={disabled} onClick={onClick} style={{display:"inline-flex",alignItems:"center",gap:4,padding:small?"4px 9px":"6px 14px",borderRadius:6,fontSize:12,fontWeight:600,cursor:disabled?"not-allowed":"pointer",background:c.bg,color:c.color,border:"1px solid "+c.border,opacity:disabled?0.6:1}}>{children}</button>;
+  return <button type="button" disabled={disabled} onClick={onClick} style={{display:"inline-flex",alignItems:"center",gap:4,padding:small?"4px 9px":"6px 14px",borderRadius:6,fontSize:12,fontWeight:600,cursor:disabled?"not-allowed":"pointer",background:c.bg,color:c.color,border:"1px solid "+c.border,opacity:disabled?0.6:1}}>{children}</button>;
 };
 
 const SELECT_STYLE = {border:"1px solid #e5e7eb",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#374151",background:"#fff",outline:"none",cursor:"pointer"};
+const INPUT_STYLE = {border:"1px solid #e5e7eb",borderRadius:8,padding:"8px 12px",fontSize:13,color:"#374151",background:"#fff",outline:"none",boxSizing:"border-box"};
 const TH_STYLE = {textAlign:"left",fontSize:11,fontWeight:600,color:"#6b7280",padding:"10px 14px",letterSpacing:"0.04em",textTransform:"uppercase",whiteSpace:"nowrap"};
 const TD_STYLE = {padding:"13px 14px",verticalAlign:"top"};
 
@@ -145,7 +150,6 @@ const TD_STYLE = {padding:"13px 14px",verticalAlign:"top"};
 const SkuPicker = ({ value, onChange, placeholder = "Buscar SKU...", options = [] }) => {
   const [query, setQuery]       = useState("");
   const [open, setOpen]         = useState(false);
-  const [focused, setFocused]   = useState(false);
   const wrapRef = useRef(null);
 
   const selected = options.find(s => s.sku_id === value);
@@ -175,7 +179,7 @@ const SkuPicker = ({ value, onChange, placeholder = "Buscar SKU...", options = [
     <div ref={wrapRef} style={{position:"relative",width:"100%"}}>
       {/* Display / search field */}
       <div
-        onClick={() => { setOpen(true); setFocused(true); }}
+        onClick={() => { setOpen(true); }}
         style={{
           display:"flex", alignItems:"center", gap:8,
           border:"1px solid "+(open?"#2563eb":"#e5e7eb"),
@@ -208,7 +212,7 @@ const SkuPicker = ({ value, onChange, placeholder = "Buscar SKU...", options = [
           />
         )}
         {value && (
-          <button onClick={handleClear} style={{background:"none",border:"none",cursor:"pointer",color:"#9ca3af",padding:0,display:"flex",flexShrink:0}}>
+          <button type="button" onClick={handleClear} style={{background:"none",border:"none",cursor:"pointer",color:"#9ca3af",padding:0,display:"flex",flexShrink:0}}>
             <ClearIcon size={13}/>
           </button>
         )}
@@ -366,15 +370,19 @@ export default function App() {
   const [loading, setLoading]   = useState(false);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [actionInfo, setActionInfo] = useState("");
   const [busyKey, setBusyKey] = useState("");
-  const [reviewItems, setReviewItems] = useState(REVIEW_DATA);
+  const [reviewItems, setReviewItems] = useState([]);
   const [search, setSearch]     = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [reviewOrder, setReviewOrder] = useState("DATE_DESC");
   const [lojaFilter, setLojaFilter] = useState("Todas");
   const [statusFilter, setStatusFilter] = useState("PENDING");
   const [editingRow, setEditingRow]   = useState(null);
   const [editValues, setEditValues]   = useState({});
-  const [mappings, setMappings] = useState(MAPPINGS_INITIAL);
-  const [catalogData, setCatalogData] = useState(CATALOG_DATA);
+  const [mappings, setMappings] = useState([]);
+  const [catalogData, setCatalogData] = useState([]);
   const [mapSearch, setMapSearch]     = useState("");
   const [mapStatusFilter, setMapStatusFilter] = useState("ALL");
   const [editingMapping, setEditingMapping]   = useState(null);
@@ -394,8 +402,9 @@ export default function App() {
 
   const pendingCount = reviewItems.filter(r=>r.status==="PENDING").length;
 
-  const loadFromApi = useCallback(async () => {
-    setLoading(true);
+  const loadFromApi = useCallback(async (options = {}) => {
+    const { silent = false } = options;
+    if (!silent) setLoading(true);
     setLoadError("");
     try {
       const [reviewRes, mappingsRes, catalogRes] = await Promise.all([
@@ -404,8 +413,29 @@ export default function App() {
         fetch("/api/catalog?limit=3000"),
       ]);
 
-      if (!reviewRes.ok || !mappingsRes.ok || !catalogRes.ok) {
-        throw new Error("Falha ao carregar dados da API.");
+      const readEndpointError = async (res, endpoint) => {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const payload = await res.json();
+          if (typeof payload?.detail === "string" && payload.detail.trim()) {
+            detail = payload.detail.trim();
+          } else if (payload?.detail) {
+            detail = JSON.stringify(payload.detail);
+          }
+        } catch {
+          // ignored
+        }
+        return `${endpoint}: ${detail}`;
+      };
+
+      if (!reviewRes.ok) {
+        throw new Error(await readEndpointError(reviewRes, "/api/review"));
+      }
+      if (!mappingsRes.ok) {
+        throw new Error(await readEndpointError(mappingsRes, "/api/mappings"));
+      }
+      if (!catalogRes.ok) {
+        throw new Error(await readEndpointError(catalogRes, "/api/catalog"));
       }
 
       const [reviewRows, mappingRows, catalogRows] = await Promise.all([
@@ -459,9 +489,12 @@ export default function App() {
         }))
       );
     } catch (err) {
+      setReviewItems([]);
+      setMappings([]);
+      setCatalogData([]);
       setLoadError(String(err?.message || err));
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -484,15 +517,24 @@ export default function App() {
     return `HTTP ${res.status}`;
   };
 
-  const runBusyAction = async (key, actionFn) => {
+  const runBusyAction = async (key, actionFn, options = {}) => {
+    const { preserveScroll = true } = options;
+    const scrollTop =
+      preserveScroll && typeof window !== "undefined" ? window.scrollY : null;
     setBusyKey(key);
     setActionError("");
+    setActionInfo("");
     try {
       await actionFn();
     } catch (err) {
       setActionError(String(err?.message || err));
     } finally {
       setBusyKey("");
+      if (scrollTop != null && typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: scrollTop, behavior: "auto" });
+        });
+      }
     }
   };
 
@@ -502,6 +544,12 @@ export default function App() {
     const v = editingRow === id ? editValues : {};
     const payload = {
       sku_id: (v.sku_id || row.suggested_sku_id || "").trim(),
+      canonical_name_override: String(
+        v.canonical_name ||
+          row.suggested_sku_name_canonical ||
+          row.suggested_sku_name ||
+          ""
+      ).trim(),
       base_measure_override: String(v.bm || row.suggested_base_measure || "").trim(),
       base_qty_per_purchase_unit_override: String(
         v.qty || row.suggested_base_qty_per_purchase_unit || ""
@@ -518,7 +566,7 @@ export default function App() {
         throw new Error(await readErrorMessage(res));
       }
       setEditingRow(null);
-      await loadFromApi();
+      await loadFromApi({ silent: true });
     });
   };
 
@@ -531,13 +579,53 @@ export default function App() {
         throw new Error(await readErrorMessage(res));
       }
       setEditingRow(null);
-      await loadFromApi();
+      await loadFromApi({ silent: true });
+    });
+  };
+
+  const handleResuggest = async (fingerprints, label) => {
+    const targets = Array.from(new Set((fingerprints || []).map(v => String(v || "").trim()).filter(Boolean)));
+    if (!targets.length) {
+      setActionError("Nenhum item selecionado para re-sugestao.");
+      return;
+    }
+    await runBusyAction("review:resuggest", async () => {
+      const res = await fetch("/api/review/resuggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fingerprints: targets,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res));
+      }
+      const payload = await res.json();
+      setActionInfo(
+        `Re-sugestao concluida (${label}): ${payload.updated || 0} item(ns) atualizados.`
+      );
+      await loadFromApi({ silent: true });
     });
   };
 
   const startEdit     = row => {
+    const scrollTop = typeof window !== "undefined" ? window.scrollY : null;
     setEditingRow(row.id);
-    setEditValues({sku_id:row.suggested_sku_id, bm:row.suggested_base_measure, qty:row.suggested_base_qty_per_purchase_unit});
+    setEditValues({
+      sku_id: row.suggested_sku_id || "",
+      canonical_name:
+        row.suggested_sku_name_canonical ||
+        row.suggested_sku_name ||
+        row.xProd_norm ||
+        "",
+      bm: row.suggested_base_measure || "",
+      qty: row.suggested_base_qty_per_purchase_unit || "1",
+    });
+    if (scrollTop != null && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollTop, behavior: "auto" });
+      });
+    }
   };
   const saveMapping = async (id, vals) => {
     await runBusyAction(`mapping:${id}`, async () => {
@@ -555,7 +643,7 @@ export default function App() {
         throw new Error(await readErrorMessage(res));
       }
       setEditingMapping(null);
-      await loadFromApi();
+      await loadFromApi({ silent: true });
     });
   };
 
@@ -568,16 +656,53 @@ export default function App() {
         throw new Error(await readErrorMessage(res));
       }
       setConfirmDelete(null);
-      await loadFromApi();
+      await loadFromApi({ silent: true });
     });
   };
 
-  const filteredReview = reviewItems.filter(r=>{
-    const matchLoja   = lojaFilter==="Todas"||r.loja===lojaFilter;
-    const matchStatus = statusFilter==="ALL"||r.status===statusFilter;
-    const matchSearch = !search||r.xProd_norm.toLowerCase().includes(search.toLowerCase())||r.fingerprint.toLowerCase().includes(search.toLowerCase());
-    return matchLoja&&matchStatus&&matchSearch;
-  });
+  const filteredReview = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedName = nameFilter.trim().toLowerCase();
+    const rows = reviewItems.filter(r => {
+      const matchLoja = lojaFilter === "Todas" || r.loja === lojaFilter;
+      const matchStatus = statusFilter === "ALL" || r.status === statusFilter;
+      const matchFingerprint =
+        !normalizedSearch ||
+        String(r.fingerprint || "").toLowerCase().includes(normalizedSearch);
+      const matchName =
+        !normalizedName ||
+        String(r.xProd_norm || "").toLowerCase().includes(normalizedName);
+      const matchDate = !dateFilter || String(r.date || "").startsWith(dateFilter);
+      return matchLoja && matchStatus && matchFingerprint && matchName && matchDate;
+    });
+
+    rows.sort((a, b) => {
+      if (reviewOrder === "NAME_ASC") {
+        return String(a.xProd_norm || "").localeCompare(
+          String(b.xProd_norm || ""),
+          "pt-BR"
+        );
+      }
+      if (reviewOrder === "DATE_ASC") {
+        return String(a.date || "").localeCompare(String(b.date || ""));
+      }
+      return String(b.date || "").localeCompare(String(a.date || ""));
+    });
+
+    return rows;
+  }, [
+    reviewItems,
+    lojaFilter,
+    statusFilter,
+    search,
+    nameFilter,
+    dateFilter,
+    reviewOrder,
+  ]);
+  const filteredPendingFingerprints = useMemo(
+    () => filteredReview.filter(r => r.status === "PENDING").map(r => String(r.id || "")),
+    [filteredReview]
+  );
   const filteredMappings = mappings.filter(m=>{
     const matchStatus = mapStatusFilter==="ALL"||m.status===mapStatusFilter;
     const matchSearch = !mapSearch||m.fingerprint.toLowerCase().includes(mapSearch.toLowerCase())||m.sku_id.toLowerCase().includes(mapSearch.toLowerCase());
@@ -590,19 +715,35 @@ export default function App() {
   });
 
   // ── Inline SKU picker for Review editing ─────────────────────────
-  const ReviewSkuInline = () => (
-    <SkuPicker
-      value={editValues.sku_id}
-      onChange={sku_id => {
-        const found = catalogData.find(s=>s.sku_id===sku_id);
-        setEditValues(v=>({...v, sku_id, bm: found ? found.base_measure : v.bm}));
-      }}
-      options={catalogData}
-      placeholder="Buscar SKU pelo nome ou categoria..."
-    />
+  const renderReviewSkuInline = () => (
+    <div style={{display:"grid",gap:6}}>
+      <SkuPicker
+        value={editValues.sku_id}
+        onChange={sku_id => {
+          const found = catalogData.find(s=>s.sku_id===sku_id);
+          setEditValues(v=>({
+            ...v,
+            sku_id,
+            bm: found ? found.base_measure : v.bm,
+            canonical_name: found ? found.name : v.canonical_name,
+          }));
+        }}
+        options={catalogData}
+        placeholder="Buscar SKU pelo nome ou categoria..."
+      />
+      <input
+        style={{...INPUT_STYLE,padding:"6px 10px"}}
+        value={editValues.canonical_name || ""}
+        onChange={e=>setEditValues(v=>({...v,canonical_name:e.target.value}))}
+        placeholder="Nome canônico sugerido (IA) para novo SKU"
+      />
+      <span style={{fontSize:10,color:"#9ca3af"}}>
+        Se nao selecionar SKU existente, este nome sera usado para criar um novo SKU.
+      </span>
+    </div>
   );
 
-  const ReviewTab = () => (
+  const renderReviewTab = () => (
     <div>
       <div style={{marginBottom:24}}>
         <h1 style={{fontSize:20,fontWeight:700,color:"#111827",marginBottom:4,letterSpacing:"-0.4px"}}>Review de SKUs</h1>
@@ -621,19 +762,54 @@ export default function App() {
           </div>
         ))}
       </div>
-      <Toolbar value={search} onChange={setSearch} placeholder="Buscar por produto ou fingerprint..."
+      <Toolbar value={search} onChange={setSearch} placeholder="Buscar por fingerprint..."
         extra={<>
+          <input
+            style={{...INPUT_STYLE,minWidth:220}}
+            value={nameFilter}
+            onChange={e=>setNameFilter(e.target.value)}
+            placeholder="Filtrar por nome do produto..."
+          />
+          <input
+            type="date"
+            style={{...INPUT_STYLE,minWidth:150}}
+            value={dateFilter}
+            onChange={e=>setDateFilter(e.target.value)}
+            title="Filtrar por data da compra"
+          />
+          <select style={SELECT_STYLE} value={reviewOrder} onChange={e=>setReviewOrder(e.target.value)}>
+            <option value="DATE_DESC">Data (mais recente)</option>
+            <option value="DATE_ASC">Data (mais antiga)</option>
+            <option value="NAME_ASC">Nome (A-Z)</option>
+          </select>
           <select style={SELECT_STYLE} value={lojaFilter} onChange={e=>setLojaFilter(e.target.value)}>{lojas.map(l=><option key={l}>{l}</option>)}</select>
           <select style={SELECT_STYLE} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
             <option value="ALL">Todos</option><option value="PENDING">Pendentes</option><option value="APPROVED">Aprovados</option><option value="IGNORED">Ignorados</option>
           </select>
         </>}
       />
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+        <Btn
+          small
+          disabled={busyKey === "review:resuggest" || filteredPendingFingerprints.length === 0}
+          onClick={() => handleResuggest(filteredPendingFingerprints, "filtro atual")}
+        >
+          <EditIcon size={11}/> Re-sugerir filtrados ({filteredPendingFingerprints.length})
+        </Btn>
+      </div>
       <Table headers={["Produto NF-e","Qtd / Preco unit","SKU Canonico Sugerido","Conversao","Status","Acoes"]}>
         {filteredReview.map((row,idx)=>{
           const isEditing = editingRow===row.id;
           const hasIssue  = !!row.conversion_issue;
           const rowBusy = busyKey === `review:${row.id}`;
+          const suggestedCanonicalName = row.suggested_sku_name_canonical || row.suggested_sku_name;
+          const approveLabel = rowBusy
+            ? "Salvando..."
+            : (
+                isEditing
+                  ? ((!editValues.sku_id && (editValues.canonical_name || "").trim()) ? "Salvar e criar SKU" : "Salvar")
+                  : "Aprovar"
+              );
           return (
             <tr key={row.id} style={{borderBottom:idx<filteredReview.length-1?"1px solid #f3f4f6":"none",background:hasIssue?"#fff9f9":"#fff"}}>
 
@@ -659,12 +835,21 @@ export default function App() {
               {/* SKU — picker quando editando, display normal caso contrário */}
               <td style={{...TD_STYLE,minWidth:220}}>
                 {isEditing ? (
-                  <ReviewSkuInline/>
+                  renderReviewSkuInline()
                 ) : row.suggested_sku_id ? (
                   <div>
                     <div style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:"#2563eb",fontWeight:700}}>{row.suggested_sku_id}</div>
                     <div style={{fontSize:12,color:"#374151",marginTop:1}}>{row.suggested_sku_name_canonical}</div>
                     {row.suggested_sku_name!==row.suggested_sku_name_canonical&&<div style={{fontSize:10,color:"#9ca3af",marginTop:1}}>NF: {row.suggested_sku_name}</div>}
+                  </div>
+                ) : suggestedCanonicalName ? (
+                  <div>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em"}}>
+                      Sugestao IA (novo SKU)
+                    </div>
+                    <div style={{fontSize:12,color:"#374151",marginTop:1,fontWeight:600}}>
+                      {suggestedCanonicalName}
+                    </div>
                   </div>
                 ) : <span style={{fontSize:12,color:"#d1d5db",fontStyle:"italic"}}>sem sugestao</span>}
               </td>
@@ -694,7 +879,16 @@ export default function App() {
                 {row.status==="PENDING"&&(
                   <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                     {!isEditing&&<Btn disabled={rowBusy} onClick={()=>startEdit(row)} variant="edit" small><EditIcon size={11}/> Editar</Btn>}
-                    <Btn disabled={rowBusy} onClick={()=>handleApprove(row.id)} variant="approve" small><CheckIcon size={11}/> {rowBusy ? "Salvando..." : (isEditing?"Salvar":"Aprovar")}</Btn>
+                    {!isEditing&&(
+                      <Btn
+                        disabled={rowBusy || busyKey === "review:resuggest"}
+                        onClick={()=>handleResuggest([row.id], `${row.xProd_norm || row.id}`)}
+                        small
+                      >
+                        <SearchIcon size={11}/> Re-sugerir
+                      </Btn>
+                    )}
+                    <Btn disabled={rowBusy} onClick={()=>handleApprove(row.id)} variant="approve" small><CheckIcon size={11}/> {approveLabel}</Btn>
                     <Btn disabled={rowBusy} onClick={()=>handleIgnore(row.id)} variant="ignore" small><XIcon size={11}/> Ignorar</Btn>
                   </div>
                 )}
@@ -706,7 +900,7 @@ export default function App() {
     </div>
   );
 
-  const MappingsTab = () => (
+  const renderMappingsTab = () => (
     <div>
       {editingMapping&&<EditModal mapping={editingMapping} catalogItems={catalogData} onSave={vals=>saveMapping(editingMapping.id,vals)} onClose={()=>setEditingMapping(null)}/>}
       {confirmDelete&&<ConfirmModal text={"Deletar o mapping \""+fpParts(confirmDelete.fingerprint).desc+"\"? Esta acao nao pode ser desfeita."} onConfirm={()=>deleteMapping(confirmDelete.id)} onClose={()=>setConfirmDelete(null)}/>}
@@ -758,7 +952,7 @@ export default function App() {
     </div>
   );
 
-  const CatalogTab = () => (
+  const renderCatalogTab = () => (
     <div>
       <div style={{marginBottom:24}}>
         <h1 style={{fontSize:20,fontWeight:700,color:"#111827",marginBottom:4,letterSpacing:"-0.4px"}}>Catalogo de SKUs</h1>
@@ -834,6 +1028,8 @@ export default function App() {
         </div>
         <nav style={{padding:"12px 10px",flex:1}}>
           {[
+            {key:"cockpit",label:"Cockpit", icon:<CockpitIcon size={15}/>},
+            {key:"upload", label:"Upload", icon:<UploadIcon size={15}/>},
             {key:"review",  label:"Review",  icon:<AlertIcon size={15}/>,badge:pendingCount},
             {key:"mappings",label:"Mappings", icon:<MapIcon   size={15}/>},
             {key:"catalog", label:"Catalogo", icon:<BookIcon  size={15}/>},
@@ -856,7 +1052,7 @@ export default function App() {
           <div style={{fontSize:10,color:"#9ca3af",fontFamily:"'DM Mono',monospace"}}>API integrada (leitura e escrita)</div>
         </div>
       </div>
-      <main style={{marginLeft:220,padding:"32px 36px",flex:1,minHeight:"100vh"}}>
+      <main style={{marginLeft:220,padding:"32px 36px",flex:1,minHeight:"100vh",overflowAnchor:"none"}}>
         {loadError && (
           <div style={{background:"#fff1f2",border:"1px solid #fecaca",borderRadius:10,padding:"10px 12px",fontSize:13,color:"#991b1b",marginBottom:12}}>
             Falha ao carregar API: {loadError}
@@ -867,12 +1063,19 @@ export default function App() {
             Falha ao salvar: {actionError}
           </div>
         )}
+        {actionInfo && (
+          <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 12px",fontSize:13,color:"#166534",marginBottom:12}}>
+            {actionInfo}
+          </div>
+        )}
         {loading && (
           <div style={{fontSize:13,color:"#6b7280",marginBottom:12}}>Carregando dados...</div>
         )}
-        {tab==="review"&&<ReviewTab/>}
-        {tab==="mappings"&&<MappingsTab/>}
-        {tab==="catalog"&&<CatalogTab/>}
+        {tab==="cockpit"&&<CockpitTab/>}
+        {tab==="upload"&&<UploadTab/>}
+        {tab==="review"&&renderReviewTab()}
+        {tab==="mappings"&&renderMappingsTab()}
+        {tab==="catalog"&&renderCatalogTab()}
       </main>
     </div>
   );

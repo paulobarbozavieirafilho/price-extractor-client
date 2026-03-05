@@ -53,6 +53,19 @@ def init_db(db_path: Path) -> None:
               FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS store_runs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              store_map_id INTEGER NOT NULL,
+              period TEXT NOT NULL,
+              started_at TEXT NOT NULL,
+              finished_at TEXT,
+              status TEXT NOT NULL,
+              message TEXT,
+              pending_skus INTEGER NOT NULL DEFAULT 0,
+              alerts_count INTEGER NOT NULL DEFAULT 0,
+              FOREIGN KEY (store_map_id) REFERENCES client_store_maps(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS runs (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               client_id INTEGER NOT NULL,
@@ -102,6 +115,7 @@ def init_db(db_path: Path) -> None:
             """
         )
         _ensure_clients_schema(conn)
+        _ensure_store_maps_schema(conn)
 
 
 def _ensure_clients_schema(conn: sqlite3.Connection) -> None:
@@ -112,6 +126,37 @@ def _ensure_clients_schema(conn: sqlite3.Connection) -> None:
     if "economic_group" not in cols:
         conn.execute(
             "ALTER TABLE clients ADD COLUMN economic_group TEXT NOT NULL DEFAULT 'default'"
+        )
+    if "contact_name" not in cols:
+        conn.execute(
+            "ALTER TABLE clients ADD COLUMN contact_name TEXT NOT NULL DEFAULT ''"
+        )
+    if "whatsapp" not in cols:
+        conn.execute(
+            "ALTER TABLE clients ADD COLUMN whatsapp TEXT NOT NULL DEFAULT ''"
+        )
+    if "client_type" not in cols:
+        conn.execute(
+            "ALTER TABLE clients ADD COLUMN client_type TEXT NOT NULL DEFAULT 'grupo'"
+        )
+
+
+def _ensure_store_maps_schema(conn: sqlite3.Connection) -> None:
+    cols = {
+        str(row["name"])
+        for row in fetch_all(conn, "PRAGMA table_info(client_store_maps)")
+    }
+    if "whatsapp" not in cols:
+        conn.execute(
+            "ALTER TABLE client_store_maps ADD COLUMN whatsapp TEXT NOT NULL DEFAULT ''"
+        )
+    if "nfstock_token_encrypted" not in cols:
+        conn.execute(
+            "ALTER TABLE client_store_maps ADD COLUMN nfstock_token_encrypted TEXT NOT NULL DEFAULT ''"
+        )
+    if "active" not in cols:
+        conn.execute(
+            "ALTER TABLE client_store_maps ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
         )
 
 

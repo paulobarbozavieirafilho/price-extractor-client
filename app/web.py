@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -11,6 +12,8 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from .db import db_session, fetch_all, fetch_one, init_db
+from .cockpit_api import create_cockpit_router
+from .upload_api import create_upload_router
 from .global_state_store import (
     apply_global_review_decision,
     export_global_state_to_excel,
@@ -20,6 +23,7 @@ from .global_state_store import (
     list_global_catalog,
     list_global_mappings,
     list_global_review_rows,
+    update_global_review_suggestion,
     upsert_global_catalog,
     upsert_global_mapping,
 )
@@ -38,6 +42,7 @@ from .notebook_bridge import LegacyNotebookBridge
 
 
 settings: Settings = load_settings()
+SKU_ID_PATTERN = re.compile(r"^SKU_(\d+)$", re.IGNORECASE)
 
 app = FastAPI(title="Price Extractor Client Panel", version="0.1.0")
 app.add_middleware(
@@ -53,6 +58,8 @@ app.mount(
     StaticFiles(directory=str(Path(__file__).parent / "static")),
     name="static",
 )
+app.include_router(create_cockpit_router(settings))
+app.include_router(create_upload_router(settings))
 
 
 @app.on_event("startup")
@@ -149,6 +156,46 @@ def _to_store_name(row: dict) -> str:
     )
 
 
+def _canonical_name_from_review_row(row: dict) -> str:
+    for key in ("suggested_sku_name_canonical", "suggested_sku_name"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _catalog_has_sku_id(sku_id: str) -> bool:
+    sku = str(sku_id or "").strip()
+    if not sku:
+        return False
+    with db_session(settings.db_path) as conn:
+        row = fetch_one(conn, "SELECT sku_id FROM global_catalog WHERE sku_id = ?", (sku,))
+    return row is not None
+
+
+def _next_catalog_sku_id() -> str:
+    with db_session(settings.db_path) as conn:
+        rows = fetch_all(conn, "SELECT sku_id FROM global_catalog")
+    max_number = 0
+    existing_ids = {
+        str(row["sku_id"] or "").strip().upper()
+        for row in rows
+        if str(row["sku_id"] or "").strip()
+    }
+    for sku in existing_ids:
+        match = SKU_ID_PATTERN.match(sku)
+        if not match:
+            continue
+        max_number = max(max_number, int(match.group(1)))
+
+    candidate = max_number + 1
+    while True:
+        sku_id = f"SKU_{candidate:06d}"
+        if sku_id.upper() not in existing_ids:
+            return sku_id
+        candidate += 1
+
+
 def _to_review_api_row(row: dict) -> dict:
     fp = str(row.get("fingerprint") or "")
     fp_parts = _parse_fp_parts(fp)
@@ -201,8 +248,17 @@ def _to_mapping_api_row(row: dict) -> dict:
 
 class ReviewApprovePayload(BaseModel):
     sku_id: str = ""
+    canonical_name_override: str = ""
     base_measure_override: str = ""
     base_qty_per_purchase_unit_override: str = ""
+
+
+class ReviewResuggestPayload(BaseModel):
+    fingerprints: list[str] = []
+    status: str = "PENDING"
+    search: str = ""
+    limit: int = 1000
+    only_without_sku: bool = False
 
 
 class MappingUpdatePayload(BaseModel):
@@ -357,16 +413,50 @@ def api_review_approve(review_id: str, payload: ReviewApprovePayload):
     if not current:
         raise HTTPException(status_code=404, detail="Item de review nao encontrado")
 
-    sku_id = (payload.sku_id or "").strip() or str(current.get("suggested_sku_id") or "").strip()
-    if not sku_id:
-        raise HTTPException(status_code=422, detail="sku_id obrigatorio para aprovar")
-
     base_measure = (payload.base_measure_override or "").strip() or str(
         current.get("suggested_base_measure") or ""
     ).strip()
+    if not base_measure:
+        base_measure = str(current.get("uCom") or "").strip()
     qty_override = (payload.base_qty_per_purchase_unit_override or "").strip() or str(
         current.get("suggested_base_qty_per_purchase_unit") or ""
     ).strip()
+    sku_id = (payload.sku_id or "").strip() or str(current.get("suggested_sku_id") or "").strip()
+    canonical_name = (payload.canonical_name_override or "").strip() or _canonical_name_from_review_row(
+        current
+    )
+    catalog_created = False
+    auto_created_sku = False
+
+    if not sku_id:
+        if not canonical_name:
+            raise HTTPException(
+                status_code=422,
+                detail="Informe um SKU existente ou um nome canonico para criar novo SKU.",
+            )
+        sku_id = _next_catalog_sku_id()
+        upsert_global_catalog(
+            settings.db_path,
+            sku_id=sku_id,
+            sku_name_canonical=canonical_name,
+            base_measure=base_measure,
+        )
+        catalog_created = True
+        auto_created_sku = True
+    elif not _catalog_has_sku_id(sku_id):
+        if canonical_name:
+            upsert_global_catalog(
+                settings.db_path,
+                sku_id=sku_id,
+                sku_name_canonical=canonical_name,
+                base_measure=base_measure,
+            )
+            catalog_created = True
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail="sku_id nao existe no catalogo; informe nome canonico para cadastrar.",
+            )
 
     ok = apply_global_review_decision(
         settings.db_path,
@@ -393,6 +483,9 @@ def api_review_approve(review_id: str, payload: ReviewApprovePayload):
     updated_mapping = _find_mapping_by_fingerprint(fp)
     return {
         "ok": True,
+        "resolved_sku_id": sku_id,
+        "catalog_created": catalog_created,
+        "catalog_auto_created": auto_created_sku,
         "review": _to_review_api_row(updated_review) if updated_review else {"id": fp},
         "mapping": _to_mapping_api_row(updated_mapping) if updated_mapping else None,
     }
@@ -430,6 +523,78 @@ def api_review_ignore(review_id: str):
     return {
         "ok": True,
         "review": _to_review_api_row(updated_review) if updated_review else {"id": fp},
+    }
+
+
+@app.post("/api/review/resuggest")
+def api_review_resuggest(payload: ReviewResuggestPayload):
+    requested_fps = [
+        str(fp or "").strip()
+        for fp in (payload.fingerprints or [])
+        if str(fp or "").strip()
+    ]
+
+    if requested_fps:
+        targets: list[dict] = []
+        seen: set[str] = set()
+        for fp in requested_fps:
+            if fp in seen:
+                continue
+            seen.add(fp)
+            row = _find_review_by_fingerprint(fp)
+            if row:
+                targets.append(row)
+    else:
+        targets = list_global_review_rows(
+            settings.db_path,
+            q=str(payload.search or "").strip(),
+            limit=max(1, min(int(payload.limit or 1000), 5000)),
+            status_filter=_review_status_to_internal(str(payload.status or "PENDING")),
+        )
+
+    if payload.only_without_sku:
+        targets = [
+            row
+            for row in targets
+            if not str(row.get("suggested_sku_id") or "").strip()
+        ]
+
+    if not targets:
+        return {"ok": True, "processed": 0, "updated": 0, "skipped": 0}
+
+    catalog_rows = list_global_catalog(settings.db_path, q="", limit=50000)
+    bridge = LegacyNotebookBridge(settings.notebook_path)
+    runtime_dir = settings.data_dir / "runtime" / "resuggest"
+    suggestions = bridge.resuggest_review_rows(
+        review_rows=targets,
+        catalog_rows=catalog_rows,
+        runtime_dir=runtime_dir,
+        editor_path=get_shared_editor_path(settings),
+        brand="GLOBAL",
+    )
+
+    updated = 0
+    for fp, sug in suggestions.items():
+        ok = update_global_review_suggestion(
+            settings.db_path,
+            fingerprint=fp,
+            suggested_sku_id=sug.get("suggested_sku_id"),
+            suggested_sku_name=sug.get("suggested_sku_name"),
+            suggested_sku_name_canonical=sug.get("suggested_sku_name_canonical"),
+            suggested_base_measure=sug.get("suggested_base_measure"),
+            suggested_base_qty_per_purchase_unit=sug.get("suggested_base_qty_per_purchase_unit"),
+            confidence=sug.get("confidence"),
+            rationale=sug.get("rationale"),
+        )
+        if ok:
+            updated += 1
+
+    export_global_state_to_excel(settings.db_path, get_shared_editor_path(settings))
+    return {
+        "ok": True,
+        "processed": len(targets),
+        "updated": int(updated),
+        "skipped": int(max(0, len(targets) - updated)),
     }
 
 

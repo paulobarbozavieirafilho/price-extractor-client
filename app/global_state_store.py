@@ -456,6 +456,62 @@ def apply_global_review_decision(
     return True
 
 
+def update_global_review_suggestion(
+    db_path: Path,
+    *,
+    fingerprint: str,
+    suggested_sku_id: str | None = None,
+    suggested_sku_name: str | None = None,
+    suggested_sku_name_canonical: str | None = None,
+    suggested_base_measure: str | None = None,
+    suggested_base_qty_per_purchase_unit: str | None = None,
+    confidence: str | None = None,
+    rationale: str | None = None,
+) -> bool:
+    fp = str(fingerprint or "").strip()
+    if not fp:
+        return False
+
+    with db_session(db_path) as conn:
+        row = fetch_one(conn, "SELECT * FROM global_review WHERE fingerprint = ?", (fp,))
+        if not row:
+            return False
+
+        payload = _review_row_payload(row)
+        if suggested_sku_id is not None:
+            payload["suggested_sku_id"] = str(suggested_sku_id).strip()
+        if suggested_sku_name is not None:
+            payload["suggested_sku_name"] = str(suggested_sku_name).strip()
+        if suggested_sku_name_canonical is not None:
+            payload["suggested_sku_name_canonical"] = str(suggested_sku_name_canonical).strip()
+        if suggested_base_measure is not None:
+            payload["suggested_base_measure"] = str(suggested_base_measure).strip()
+        if suggested_base_qty_per_purchase_unit is not None:
+            payload["suggested_base_qty_per_purchase_unit"] = str(
+                suggested_base_qty_per_purchase_unit
+            ).strip()
+        if confidence is not None:
+            payload["confidence"] = str(confidence).strip()
+        if rationale is not None:
+            payload["rationale"] = str(rationale).strip()
+
+        payload["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        conn.execute(
+            """
+            UPDATE global_review
+               SET payload_json = ?, updated_at = ?
+             WHERE fingerprint = ?
+            """,
+            (
+                json.dumps(payload, ensure_ascii=False),
+                utc_now_iso(),
+                fp,
+            ),
+        )
+    return True
+
+
 def list_global_mappings(db_path: Path, q: str = "", limit: int = 500) -> list[dict[str, Any]]:
     qn = q.strip().lower()
     rows_out: list[dict[str, Any]] = []
