@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import threading
+import time
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -43,6 +45,10 @@ from .notebook_bridge import LegacyNotebookBridge
 
 settings: Settings = load_settings()
 SKU_ID_PATTERN = re.compile(r"^SKU_(\d+)$", re.IGNORECASE)
+EXPORT_DEBOUNCE_SECONDS = 1.5
+_export_lock = threading.Lock()
+_export_event = threading.Event()
+_export_worker: threading.Thread | None = None
 
 app = FastAPI(title="Price Extractor Client Panel", version="0.1.0")
 app.add_middleware(
@@ -194,6 +200,40 @@ def _next_catalog_sku_id() -> str:
         if sku_id.upper() not in existing_ids:
             return sku_id
         candidate += 1
+
+
+def _export_shared_state_worker() -> None:
+    global _export_worker
+
+    while True:
+        _export_event.wait()
+        time.sleep(EXPORT_DEBOUNCE_SECONDS)
+        _export_event.clear()
+
+        try:
+            export_global_state_to_excel(settings.db_path, get_shared_editor_path(settings))
+        except Exception as exc:  # pragma: no cover
+            print(f"[export-shared-state] falhou: {type(exc).__name__}: {exc}")
+
+        with _export_lock:
+            if not _export_event.is_set():
+                _export_worker = None
+                return
+
+
+def _schedule_shared_state_export() -> None:
+    global _export_worker
+
+    _export_event.set()
+    with _export_lock:
+        if _export_worker and _export_worker.is_alive():
+            return
+        _export_worker = threading.Thread(
+            target=_export_shared_state_worker,
+            name="shared-state-export",
+            daemon=True,
+        )
+        _export_worker.start()
 
 
 def _to_review_api_row(row: dict) -> dict:
@@ -483,7 +523,7 @@ def api_review_approve(review_id: str, payload: ReviewApprovePayload):
         base_measure_override=base_measure,
         base_qty_per_purchase_unit_override=qty_override,
     )
-    export_global_state_to_excel(settings.db_path, get_shared_editor_path(settings))
+    _schedule_shared_state_export()
 
     updated_review = _find_review_by_fingerprint(fp)
     updated_mapping = _find_mapping_by_fingerprint(fp)
@@ -524,7 +564,7 @@ def api_review_ignore(review_id: str):
             ),
         )
 
-    export_global_state_to_excel(settings.db_path, get_shared_editor_path(settings))
+    _schedule_shared_state_export()
     updated_review = _find_review_by_fingerprint(fp)
     return {
         "ok": True,
@@ -595,7 +635,7 @@ def api_review_resuggest(payload: ReviewResuggestPayload):
         if ok:
             updated += 1
 
-    export_global_state_to_excel(settings.db_path, get_shared_editor_path(settings))
+    _schedule_shared_state_export()
     return {
         "ok": True,
         "processed": len(targets),
@@ -629,7 +669,7 @@ def api_update_mapping(mapping_id: str, payload: MappingUpdatePayload):
     if not ok:
         raise HTTPException(status_code=400, detail="Falha ao salvar mapping")
 
-    export_global_state_to_excel(settings.db_path, get_shared_editor_path(settings))
+    _schedule_shared_state_export()
     updated = _find_mapping_by_fingerprint(fp)
     if not updated:
         raise HTTPException(status_code=500, detail="Mapping salvo mas nao encontrado para retorno")
@@ -648,7 +688,7 @@ def api_delete_mapping(mapping_id: str):
             raise HTTPException(status_code=404, detail="Mapping nao encontrado")
         conn.execute("DELETE FROM global_mappings WHERE fingerprint = ?", (fp,))
 
-    export_global_state_to_excel(settings.db_path, get_shared_editor_path(settings))
+    _schedule_shared_state_export()
     return {"ok": True, "id": fp}
 
 
