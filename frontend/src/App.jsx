@@ -802,7 +802,7 @@ export default function App() {
           const isEditing = editingRow===row.id;
           const hasIssue  = !!row.conversion_issue;
           const rowBusy = busyKey === `review:${row.id}`;
-          const suggestedCanonicalName = row.suggested_sku_name_canonical || row.suggested_sku_name;
+          const suggestedDisplayName = row.suggested_sku_name || row.suggested_sku_name_canonical;
           const approveLabel = rowBusy
             ? "Salvando..."
             : (
@@ -839,16 +839,16 @@ export default function App() {
                 ) : row.suggested_sku_id ? (
                   <div>
                     <div style={{fontFamily:"'DM Mono',monospace",fontSize:11,color:"#2563eb",fontWeight:700}}>{row.suggested_sku_id}</div>
-                    <div style={{fontSize:12,color:"#374151",marginTop:1}}>{row.suggested_sku_name_canonical}</div>
-                    {row.suggested_sku_name!==row.suggested_sku_name_canonical&&<div style={{fontSize:10,color:"#9ca3af",marginTop:1}}>NF: {row.suggested_sku_name}</div>}
+                    <div style={{fontSize:12,color:"#374151",marginTop:1}}>{suggestedDisplayName}</div>
+                    {row.suggested_sku_name && row.suggested_sku_name_canonical && row.suggested_sku_name!==row.suggested_sku_name_canonical&&<div style={{fontSize:10,color:"#9ca3af",marginTop:1}}>Canonico: {row.suggested_sku_name_canonical}</div>}
                   </div>
-                ) : suggestedCanonicalName ? (
+                ) : suggestedDisplayName ? (
                   <div>
                     <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em"}}>
                       Sugestao IA (novo SKU)
                     </div>
                     <div style={{fontSize:12,color:"#374151",marginTop:1,fontWeight:600}}>
-                      {suggestedCanonicalName}
+                      {suggestedDisplayName}
                     </div>
                   </div>
                 ) : <span style={{fontSize:12,color:"#d1d5db",fontStyle:"italic"}}>sem sugestao</span>}
