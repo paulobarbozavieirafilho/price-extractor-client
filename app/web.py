@@ -328,16 +328,22 @@ def api_review(
     search: str = "",
     limit: int = 500,
 ):
-    rows = list_global_review_rows(
-        settings.db_path,
-        q=search,
-        limit=max(1, min(limit, 2000)),
-        status_filter=_review_status_to_internal(status),
-    )
-    if loja.strip():
-        loja_norm = loja.strip().lower()
-        rows = [row for row in rows if loja_norm in _to_store_name(row).lower()]
-    return [_to_review_api_row(row) for row in rows]
+    try:
+        rows = list_global_review_rows(
+            settings.db_path,
+            q=search,
+            limit=max(1, min(limit, 2000)),
+            status_filter=_review_status_to_internal(status),
+        )
+        if loja.strip():
+            loja_norm = loja.strip().lower()
+            rows = [row for row in rows if loja_norm in _to_store_name(row).lower()]
+        return [_to_review_api_row(row) for row in rows]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"api_review falhou: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 @app.get("/api/mappings")

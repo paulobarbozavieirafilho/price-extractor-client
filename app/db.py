@@ -12,9 +12,10 @@ def utc_now_iso() -> str:
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 
@@ -31,6 +32,9 @@ def db_session(db_path: Path):
 def init_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with db_session(db_path) as conn:
+        # Apply once at startup; forcing this pragma on every request can cause
+        # transient locks under concurrent reads/writes.
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS clients (
